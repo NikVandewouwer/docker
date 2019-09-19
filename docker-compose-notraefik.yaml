@@ -1,0 +1,210 @@
+version: '3'
+
+services:
+  plex:
+    container_name: "plex"
+    image: "plexinc/pms-docker"
+    restart: unless-stopped
+    devices:
+      - /dev/dri:/dev/dri
+    network_mode: host
+    environment:
+      - TZ=Europe/Brussels
+      - HOSTNAME="plex.${DOMAIN}"
+      - PLEX_CLAIM="${PLEX_CLAIM}"
+      - ADVERTISE_IP="http://10.2.1.200:32400/"
+      - PLEX_GID=100
+      - PLEX_UID=1053
+    ports:
+      - "32400:32400/tcp"
+      - "3005:3005/tcp"
+      - "8324:8324/tcp"
+      - "32469:32469/tcp"
+      - "1901:1900/udp"
+      - "32410:32410/udp"
+      - "32412:32412/udp"
+      - "32413:32413/udp"
+      - "32414:32414/udp"
+    volumes:
+      - ${BASE}/docker/plex:/config
+      - ${BASE}/docker/plex/transcode:/transcode
+      - ${BASE}/video:/media
+      - ${BASE}/docker/shared:/shared
+  
+  portainer:
+    container_name: "portainer"
+    image: "portainer/portainer:latest"
+    restart: unless-stopped
+#    command: -H unix:///var/run/docker.sock
+    network_mode: bridge
+    environment:
+      - TZ=Europe/Brussels
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${BASE}/docker/portainer/data:/data
+      - ${BASE}/docker/shared:/shared
+  
+  watchtower:
+    container_name: "watchtower"
+    image: "v2tec/watchtower:latest"
+    restart: unless-stopped
+    command: --schedule "0 0 4 * * *" --cleanup
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  organizr:
+    container_name: "organizr"
+    image: "lsiocommunity/organizr:latest"
+    restart: unless-stopped
+    network_mode: bridge
+    environment:
+      - PUID=1053
+      - PGID=100
+      - TZ=Europe/Brussels
+    ports:
+      - "8182:80"
+    volumes:
+      - ${BASE}/docker/organizr/config:/config
+      - ${BASE}/docker/shared:/shared
+
+  radarr:
+    container_name: "radarr"
+    image: "linuxserver/radarr:latest"
+    restart: unless-stopped 
+    network_mode: bridge
+    environment:
+      - PUID=1053
+      - PGID=100
+      - TZ=Europe/Brussels
+      - UMASK_SET=022
+    ports:
+      - "7878:7878"
+    volumes:
+      - ${BASE}/docker/radarr/config:/config
+      - ${BASE}/docker/transmission/downloads:/downloads
+      - ${BASE}/video/Movies:/movies
+      - ${BASE}/docker/shared:/shared
+      - /etc/localtime:/etc/localtime:ro
+
+  sonarr:
+    container_name: "sonarr"
+    image: "linuxserver/sonarr:latest"
+    restart: unless-stopped
+    network_mode: bridge
+    environment:
+      - PUID=1053
+      - PGID=100
+      - TZ=Europe/Brussels
+      - UMASK_SET=022
+    ports:
+      - "8989:8989"
+    volumes:
+      - ${BASE}/docker/sonarr/config:/config
+      - ${BASE}/docker/transmission/downloads:/downloads
+      - ${BASE}/video/TV Shows:/tv
+      - ${BASE}/docker/shared:/shared
+      - /etc/localtime:/etc/localtime:ro
+
+  bazarr:
+    container_name: "bazarr"
+    image: "linuxserver/bazarr:latest"
+    restart: unless-stopped 
+    network_mode: bridge
+    environment:
+      - PUID=1053
+      - PGID=100
+      - TZ=Europe/Brussels
+      - UMASK_SET=022
+    ports:
+      - "6767:6767"
+    volumes:
+      - ${BASE}/docker/bazarr/config:/config
+      - ${BASE}/video/Movies:/movies
+      - ${BASE}/video/TV Shows:/tv
+      - ${BASE}/docker/shared:/shared
+      - /etc/localtime:/etc/localtime:ro
+  
+  plexpy:
+    container_name: "plexpy"
+    image: "linuxserver/tautulli:latest"
+    restart: unless-stopped
+    network_mode: bridge
+    environment:
+      - PUID=1053
+      - PGID=100
+      - TZ=Europe/Brussels
+    ports:
+      - "8181:8181"
+    volumes:
+      - ${BASE}/docker/plexpy/config:/config
+      - ${BASE}/docker/plex/Library/Application Support/Plex Media Server/Logs:/logs:ro
+      - ${BASE}/docker/shared:/shared
+
+  ombi:
+    container_name: "ombi"
+    image: "linuxserver/ombi:latest"
+    restart: unless-stopped
+    network_mode: bridge
+    environment:
+      - PUID=1053
+      - PGID=100
+      - TZ=Europe/Brussels
+    ports:
+      - "3579:3579"
+    volumes:
+      - ${BASE}/docker/ombi/config:/config
+      - ${BASE}/docker/shared:/shared  
+
+  jackett:
+    container_name: "jackett"
+    image: "linuxserver/jackett:latest"
+    restart: unless-stopped
+    network_mode: bridge
+    environment:
+      - PUID=1053
+      - PGID=100
+      - TZ=Europe/Brussels
+    ports:
+      - "9117:9117"
+    volumes:
+      - ${BASE}/docker/jackett/config:/config
+      - ${BASE}/downloads:/downloads
+      - ${BASE}/docker/shared:/shared
+      - /etc/localtime:/etc/localtime:ro
+
+  netdata:
+    container_name: "netdata"
+    image: "netdata/netdata:latest"
+    restart: unless-stopped
+    network_mode: bridge
+    environment:
+      - TZ=Europe/Brussels
+    ports:
+      - "19999:19999"
+    volumes:
+      - ${BASE}/docker/netdata/proc:/host/proc:ro
+      - ${BASE}/docker/netdata/sys:/host/sys:ro
+      - ${BASE}/docker/shared:/shared
+      
+  transmission:
+    container_name: "transmission"
+    image: "linuxserver/transmission:latest"
+    restart: unless-stopped
+    environment:
+      - PUID=1053
+      - PGID=100
+      - TZ=Europe/Brussels
+      - TRANSMISSION_WEB_HOME=/transmission-web-control/ 
+      - USER=${HTTP_USER}
+      - PASS=${HTTP_PASS}
+    volumes:
+      - ${BASE}/docker/transmission/config:/config
+      - ${BASE}/docker/transmission/downloads:/downloads
+      - ${BASE}/docker/transmission/watch:/watch
+    ports:
+      - 9091:9091
+      - 51413:51413
+      - 51413:51413/udp
+    

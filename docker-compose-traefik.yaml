@@ -1,0 +1,320 @@
+version: '3'
+
+services: 
+  watchtower:
+    container_name: "watchtower"
+    image: "v2tec/watchtower:latest"
+    labels:
+      - "traefik.enable=false"
+    restart: unless-stopped
+    command: --schedule "0 0 4 * * *" --cleanup
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  traefik:
+    container_name: "traefik"
+    image: traefik:v1.7.16
+    restart: unless-stopped
+    command: 
+      --api 
+      --docker
+      --acme.storage=/acme/acme.json
+    labels:
+      - "traefik.frontend.rule=Host:traefik.${DOMAIN}" 
+#      - "traefik.frontend.rule=Host:${DOMAIN}; PathPrefix: /traefik"
+      - "traefik.backend=traefik"
+      - "traefik.docker.network=traefik"
+      - "traefik.port=8080"
+      
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${BASE}/docker/traefik/traefik.toml:/traefik.toml
+      - ${BASE}/docker/traefik/acme:/acme
+      - ${BASE}/docker/traefik/logs:/logs
+    ports:
+      - 980:80
+      - 9443:443
+      - 8080:8080
+    networks:
+      - traefik
+      
+  portainer:
+    container_name: "portainer"
+    image: "portainer/portainer:latest"
+    restart: unless-stopped
+#    command: -H unix:///var/run/docker.sock
+    labels:
+      - "traefik.frontend.rule=Host:portainer.${DOMAIN}"
+#      - "traefik.frontend.rule=Host:${DOMAIN}; PathPrefix: /portainer"
+      - "traefik.backend=portainer"
+      - "traefik.docker.network=traefik"
+      - "traefik.port=9000"
+    environment:
+      - TZ=Europe/Brussels
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${BASE}/docker/portainer/data:/data
+      - ${BASE}/docker/shared:/shared
+    ports:
+      - "9000:9000"
+    networks:
+      - traefik
+      
+  netdata:
+    container_name: "netdata"
+    image: "netdata/netdata:latest"
+    restart: unless-stopped
+    labels:
+      - "traefik.frontend.rule=Host:netdata.${DOMAIN}" 
+#      - "traefik.frontend.rule=Host:${DOMAIN}; PathPrefix: /netdata"
+      - "traefik.backend=netdata"
+      - "traefik.docker.network=traefik"
+      - "traefik.port=19999"
+    environment:
+      - TZ=Europe/Brussels
+    volumes:
+      - ${BASE}/docker/netdata/proc:/host/proc:ro
+      - ${BASE}/docker/netdata/sys:/host/sys:ro
+      - ${BASE}/docker/shared:/shared
+    ports:
+      - "19999:19999"   
+    networks:
+      - traefik
+      
+  plex:
+    container_name: "plex"
+    image: "plexinc/pms-docker"
+    restart: unless-stopped
+    devices:
+      - /dev/dri:/dev/dri
+    labels:
+      - "traefik.frontend.rule=Host:plex.${DOMAIN}" 
+#      - "traefik.frontend.rule=Host:${DOMAIN}; PathPrefix: /plex"
+      - "traefik.backend=plex"
+      - "traefik.docker.network=traefik"
+      - "traefik.port=32400"
+    environment:
+      - TZ=Europe/Brussels
+      - HOSTNAME="plex.${DOMAIN}"
+      - PLEX_CLAIM="${PLEX_CLAIM}"
+      - ADVERTISE_IP=http://10.2.1.200:32400,https://plex.${DOMAIN}:443
+      - PLEX_GID=100
+      - PLEX_UID=1053
+    volumes:
+      - ${BASE}/docker/plex:/config
+      - ${BASE}/docker/plex/transcode:/transcode
+      - ${BASE}/video:/media
+      - ${BASE}/docker/shared:/shared
+    ports:
+      - "32400:32400/tcp"
+      - "3005:3005/tcp"
+      - "8324:8324/tcp"
+      - "32469:32469/tcp"
+      - "1901:1900/udp"
+      - "32410:32410/udp"
+      - "32412:32412/udp"
+      - "32413:32413/udp"
+      - "32414:32414/udp"
+    networks:
+      - traefik
+      
+  transmission:
+    container_name: "transmission"
+    image: "linuxserver/transmission:latest"
+    restart: unless-stopped
+    labels:
+      - "traefik.frontend.rule=Host:transmission.${DOMAIN}" 
+#      - "traefik.frontend.rule=Host:${DOMAIN}; PathPrefix: /transmission"
+      - "traefik.backend=transmission"
+      - "traefik.docker.network=traefik"
+      - "traefik.port=9091"
+    environment:
+      - PUID=1053
+      - PGID=100
+      - TZ=Europe/Brussels
+      - TRANSMISSION_WEB_HOME=/transmission-web-control/ 
+      - USER=${HTTP_USER}
+      - PASS=${HTTP_PASS}
+    volumes:
+      - ${BASE}/docker/transmission/config:/config
+      - ${BASE}/docker/transmission/downloads:/downloads
+      - ${BASE}/docker/transmission/watch:/watch
+    ports:
+      - 9091:9091
+      - 51413:51413
+      - 51413:51413/udp
+    networks:
+      - traefik
+      
+  jackett:
+    container_name: "jackett"
+    image: "linuxserver/jackett:latest"
+    restart: unless-stopped
+    labels:
+      - "traefik.frontend.rule=Host:jackett.${DOMAIN}" 
+#      - "traefik.frontend.rule=Host:${DOMAIN}; PathPrefix: /jackett"
+      - "traefik.backend=jackett"
+      - "traefik.docker.network=traefik"
+      - "traefik.port=9117"
+    environment:
+      - PUID=1053
+      - PGID=100
+      - TZ=Europe/Brussels
+    volumes:
+      - ${BASE}/docker/jackett/config:/config
+      - ${BASE}/downloads:/downloads
+      - ${BASE}/docker/shared:/shared
+#      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "9117:9117"
+    networks:
+      - traefik
+
+  ombi:
+    container_name: "ombi"
+    image: "linuxserver/ombi:latest"
+    restart: unless-stopped
+    labels:
+      - "traefik.frontend.rule=Host:ombi.${DOMAIN}" 
+#      - "traefik.frontend.rule=Host:${DOMAIN}; PathPrefixStrip: /ombi"
+      - "traefik.backend=ombi"
+      - "traefik.docker.network=traefik"
+      - "traefik.port=3579"
+    environment:
+      - PUID=1053
+      - PGID=100
+      - TZ=Europe/Brussels
+    volumes:
+      - ${BASE}/docker/ombi/config:/config
+      - ${BASE}/docker/shared:/shared  
+    ports:
+      - "3579:3579"
+    networks:
+      - traefik
+      
+  plexpy:
+    container_name: "plexpy"
+    image: "linuxserver/tautulli:latest"
+    restart: unless-stopped
+    labels:
+      - "traefik.frontend.rule=Host:plexpy.${DOMAIN}" 
+#      - "traefik.frontend.rule=Host:${DOMAIN}; PathPrefix: /plexpy"
+      - "traefik.backend=plexpy"
+      - "traefik.docker.network=traefik"
+      - "traefik.port=8181"
+    environment:
+      - PUID=1053
+      - PGID=100
+      - TZ=Europe/Brussels
+    volumes:
+      - ${BASE}/docker/plexpy/config:/config
+      - ${BASE}/docker/plex/Library/Application Support/Plex Media Server/Logs:/logs:ro
+      - ${BASE}/docker/shared:/shared
+    ports:
+      - "8181:8181"
+    networks:
+      - traefik
+
+  bazarr:
+    container_name: "bazarr"
+    image: "linuxserver/bazarr:latest"
+    restart: unless-stopped 
+    labels:
+      - "traefik.frontend.rule=Host:bazarr.${DOMAIN}" 
+#      - "traefik.frontend.rule=Host:${DOMAIN}; PathPrefix: /bazarr"
+      - "traefik.backend=bazarr"
+      - "traefik.docker.network=traefik"
+      - "traefik.port=6767"
+    environment:
+      - PUID=1053
+      - PGID=100
+      - TZ=Europe/Brussels
+      - UMASK_SET=022
+    volumes:
+      - ${BASE}/docker/bazarr/config:/config
+      - ${BASE}/video/Movies:/movies
+      - ${BASE}/video/TV Shows:/tv
+      - ${BASE}/docker/shared:/shared
+#      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "6767:6767"
+    networks:
+      - traefik
+
+  sonarr:
+    container_name: "sonarr"
+    image: "linuxserver/sonarr:latest"
+    restart: unless-stopped
+    labels:
+      - "traefik.frontend.rule=Host:sonarr.${DOMAIN}" 
+#      - "traefik.frontend.rule=Host:${DOMAIN}; PathPrefix: /sonarr"
+      - "traefik.backend=sonarr"
+      - "traefik.docker.network=traefik"
+      - "traefik.port=8989"
+    environment:
+      - PUID=1053
+      - PGID=100
+      - TZ=Europe/Brussels
+      - UMASK_SET=022
+    volumes:
+      - ${BASE}/docker/sonarr/config:/config
+      - ${BASE}/docker/transmission/downloads:/downloads
+      - ${BASE}/video/TV Shows:/tv
+      - ${BASE}/docker/shared:/shared
+#      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "8989:8989"
+    networks:
+      - traefik
+
+  radarr:
+    container_name: "radarr"
+    image: "linuxserver/radarr:latest"
+    restart: unless-stopped 
+    labels:
+      - "traefik.frontend.rule=Host:radarr.${DOMAIN}" 
+#      - "traefik.frontend.rule=Host:${DOMAIN}; PathPrefix: /radarr"
+      - "traefik.backend=radarr"
+      - "traefik.docker.network=traefik"
+      - "traefik.port=7878"
+    environment:
+      - PUID=1053
+      - PGID=100
+      - TZ=Europe/Brussels
+      - UMASK_SET=022
+    volumes:
+      - ${BASE}/docker/radarr/config:/config
+      - ${BASE}/docker/transmission/downloads:/downloads
+      - ${BASE}/video/Movies:/movies
+      - ${BASE}/docker/shared:/shared
+#      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "7878:7878"
+    networks:
+      - traefik
+
+#  organizr:
+#    container_name: "organizr"
+#    image: "lsiocommunity/organizr:latest"
+#    restart: unless-stopped
+#    labels:
+#      - "traefik.frontend.rule=Host:organizr.${DOMAIN}" 
+##      - "traefik.frontend.rule=Host:${DOMAIN}; PathPrefix: /radarr"
+#      - "traefik.backend=organizr"
+#      - "traefik.docker.network=traefik"
+#      - "traefik.port=8182"
+#    environment:
+#      - PUID=1053
+#      - PGID=100
+#      - TZ=Europe/Brussels
+#    volumes:
+#      - ${BASE}/docker/organizr/config:/config
+#      - ${BASE}/docker/shared:/shared
+#    ports:
+#      - "8182:80"
+#    networks:
+#      - traefik
+      
+networks:
+  traefik:
+    external: true
